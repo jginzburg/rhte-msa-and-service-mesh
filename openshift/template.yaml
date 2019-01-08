@@ -1,0 +1,125 @@
+apiVersion: v1
+kind: Template
+metadata:
+  name: catalog-template
+  annotations:
+    openshift.io/display-name: Catalog
+    iconClass: fa fa-code
+    description: Template to generate the Catalog World application
+objects:
+- apiVersion: v1
+  kind: ImageStream
+  metadata:
+    name: ${PARAM_IMAGE_NAME}
+- apiVersion: v1
+  kind: BuildConfig
+  metadata:
+    labels:
+      app: ${PARAM_APP_NAME}
+    name: ${PARAM_APP_NAME}
+  spec:
+    selector:
+      deploymentConfig: ${PARAM_APP_NAME}
+    runPolicy: Serial     
+    source: 
+      type: Binary
+    strategy: 
+      sourceStrategy:
+        from:
+          kind: ImageStreamTag
+          name: redhat-openjdk18-openshift:1.2
+          namespace: openshift
+    output: 
+      to:
+        kind: ImageStreamTag
+        name: ${PARAM_IMAGE_NAME}:latest
+- apiVersion: v1
+  kind: DeploymentConfig
+  metadata:
+    labels:
+      app: ${PARAM_APP_NAME}
+    name: ${PARAM_APP_NAME}
+  spec:
+    selector:
+      deploymentConfig: ${PARAM_APP_NAME}
+    template: 
+      metadata:
+        labels:
+          deploymentConfig: ${PARAM_APP_NAME}
+          name: ${PARAM_APP_NAME}
+      spec:
+        containers:
+          - name: catalog
+            env:
+              - name: TZ
+                value: America/Argentina/Buenos_Aires
+              - name: CATALOG_ENVIRONMENT
+                valueFrom:
+                  configMapKeyRef:
+                    name: ${PARAM_APP_NAME}-config
+                    key: hello.environment
+              - name: HELLO_STRING
+                valueFrom:
+                  configMapKeyRef:
+                    name: ${PARAM_APP_NAME}-config
+                    key: hello.string
+            image: ${PARAM_IMAGE_NAME}:latest
+            ports:
+              - containerPort: 8080
+                protocol: TCP
+            resources:
+              limits:
+                cpu: 500m
+                memory: 300Mi
+              requests:
+                cpu: 500m
+                memory: 300Mi
+    triggers: []
+    replicas: 1 
+    strategy: 
+      type: Rolling
+- apiVersion: v1
+  kind: Service
+  metadata:
+    labels:
+      app: ${PARAM_APP_NAME}
+    name: ${PARAM_APP_NAME}
+  spec:
+    ports:
+      - port: 8080
+        protocol: TCP
+        targetPort: 8080
+    selector:
+      deploymentConfig: ${PARAM_APP_NAME}
+    sessionAffinity: None
+    type: ClusterIP
+- apiVersion: v1
+  kind: ConfigMap
+  metadata:
+    name: ${PARAM_APP_NAME}-config
+  data:
+    hello.environment: dev
+    hello.string: Hello from OpenShift!
+- apiVersion: v1
+  kind: Route
+  metadata:
+    labels:
+      app: ${PARAM_APP_NAME}
+    name: ${PARAM_APP_NAME}
+  spec:
+    to:
+      kind: Service
+      name: ${PARAM_APP_NAME}
+      weight: 100
+    wildcardPolicy: None
+parameters:
+- description: The application name
+  displayName: Application name
+  name: PARAM_APP_NAME
+  value: catalog
+  required: true
+- description: The image name
+  displayName: Image name
+  name: PARAM_IMAGE_NAME
+  value: catalog
+  required: true
